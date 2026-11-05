@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-11-05",
+  "products": [
+    {
+      "id": "lifeline-academy",
+      "name": "LifeLine Academy",
+      "repository": "JN3098/nki-academy",
+      "version": "0.3.9",
+      "status": "in_development",
+      "releaseNotes": [],
+      "verifiedFrom": "package.json"
+    },
+    {
+      "id": "schichtwerk",
+      "name": "Schichtwerk",
+      "repository": "JN3098/schichtwerk",
+      "version": null,
+      "status": "source_unavailable",
+      "releaseNotes": [],
+      "verifiedFrom": "README.md only; no deploy"
+    },
+    {
+      "id": "slide-in",
+      "name": "Slide In",
+      "repository": "JN3098/slide-in",
+      "version": "1.0.0",
+      "status": "in_development",
+      "releaseNotes": [],
+      "verifiedFrom": "package.json"
+    }
+  ]
+}
