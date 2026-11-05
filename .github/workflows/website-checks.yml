@@ -1,0 +1,42 @@
+name: Website checks
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  static-site:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate website pages and internal links
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from html.parser import HTMLParser
+          class Checker(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.links=[]
+                  self.titles=0
+              def handle_starttag(self, tag, attrs):
+                  data=dict(attrs)
+                  if tag=='title': self.titles+=1
+                  if tag=='a' and 'href' in data: self.links.append(data['href'])
+          pages=['index.html','lifeline-academy.html','schichtwerk.html']
+          for name in pages:
+              text=Path(name).read_text(encoding='utf-8')
+              assert '<html' in text.lower() and '</html>' in text.lower(), name
+              p=Checker();p.feed(text)
+              assert p.titles>=1, name+' missing title'
+              for href in p.links:
+                  if href.startswith('/') and not href.startswith('//'):
+                      dest=href.split('#')[0].split('?')[0].lstrip('/')
+                      if dest and '.' in dest and not Path(dest).exists():
+                          raise AssertionError(f'{name}: missing local target {href}')
+              print(name, 'OK')
+          PY
