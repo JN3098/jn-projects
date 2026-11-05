@@ -1,0 +1,76 @@
+name: Receive approved app release metadata
+on:
+  repository_dispatch:
+    types: [approved-app-release]
+  workflow_dispatch:
+    inputs:
+      app:
+        description: App ID
+        required: true
+        type: choice
+        options: [lifeline-academy, schichtwerk, slide-in]
+      version:
+        description: Verified version
+        required: true
+      status:
+        description: Verified status
+        required: true
+        type: choice
+        options: [in_development, beta, released]
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  propose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate and stage metadata
+        env:
+          PAYLOAD: ${{ toJSON(github.event.client_payload) }}
+          MANUAL_APP: ${{ inputs.app }}
+          MANUAL_VERSION: ${{ inputs.version }}
+          MANUAL_STATUS: ${{ inputs.status }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          python3 - <<'PY'
+          import json,os,re,pathlib
+          p=pathlib.Path('app-releases.json')
+          data=json.loads(p.read_text())
+          payload=json.loads(os.environ['PAYLOAD']) if os.environ['EVENT_NAME']=='repository_dispatch' else {}
+          app=payload.get('app') if payload else os.environ['MANUAL_APP']
+          version=payload.get('version') if payload else os.environ['MANUAL_VERSION']
+          status=payload.get('status') if payload else os.environ['MANUAL_STATUS']
+          if app not in ('lifeline-academy','schichtwerk','slide-in'): raise SystemExit('Unknown app')
+          if not isinstance(version,str) or not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:[-+][a-zA-Z0-9.-]+)?',version): raise SystemExit('Invalid version')
+          if status not in ('in_development','beta','released'): raise SystemExit('Invalid status')
+          notes=payload.get('releaseNotes',[]) if payload else []
+          if not isinstance(notes,list) or len(notes)>8 or any(not isinstance(x,str) or len(x)>200 for x in notes): raise SystemExit('Invalid release notes')
+          item=next(x for x in data['products'] if x['id']==app)
+          item.update(version=version,status=status,releaseNotes=notes,verifiedFrom='approved release event')
+          from datetime import datetime,timezone
+          data['updatedAt']=datetime.now(timezone.utc).date().isoformat()
+          p.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n')
+          PY
+      - name: Validate JSON and site pages
+        run: |
+          python3 -m json.tool app-releases.json >/dev/null
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in ('index.html','lifeline-academy.html','schichtwerk.html','slide-in.html'):
+              s=Path(name).read_text()
+              assert '<html' in s.lower() and '</html>' in s.lower(),name
+          PY
+      - name: Open review PR (never auto-publish)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet -- app-releases.json; then echo "No change"; exit 0; fi
+          branch="automation/app-release-${GITHUB_RUN_ID}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add app-releases.json
+          git commit -m "chore: propose verified app release metadata"
+          git push origin "$branch"
+          gh pr create --base main --head "$branch" --title "App release metadata update" --body "Automated proposal. Review the app version, status and release notes before merging or publishing."
